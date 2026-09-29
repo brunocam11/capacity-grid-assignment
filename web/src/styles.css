@@ -227,19 +227,49 @@ thead th:first-child {
   min-width: 10rem;
 }
 
-.edit-display,
-.edit-form {
+.edit-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem 1rem;
+  margin: 0.5rem 1.25rem 1rem;
+  padding: 0.85rem;
+  border: 1px solid #d7dfe7;
+  border-radius: 0.4rem;
+  background: #f5f8fb;
+}
+
+.edit-panel > div:first-child {
+  flex: 1 1 12rem;
+}
+
+.edit-panel p {
+  margin: 0.2rem 0 0;
+  color: #526273;
+  font-size: 0.85rem;
+}
+
+.edit-panel label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.edit-panel input {
+  width: 7rem;
+}
+
+.edit-actions,
+.edit-display {
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
 
-.edit-form input {
-  width: 5rem;
-}
-
-.edit-form button {
-  padding: 0.4rem;
+.edit-panel .edit-error {
+  flex-basis: 100%;
+  color: #87291f;
 }
 
 .text-button {
