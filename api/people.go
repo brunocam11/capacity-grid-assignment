@@ -39,10 +39,11 @@ func (s *server) handleUpdatePerson(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "body must contain one JSON object", http.StatusBadRequest)
 		return
 	}
-	if input.WeeklyHours == nil || math.IsNaN(*input.WeeklyHours) || math.IsInf(*input.WeeklyHours, 0) || *input.WeeklyHours < 0 || *input.WeeklyHours > 168 {
-		http.Error(w, "weeklyHours must be between 0 and 168", http.StatusBadRequest)
+	if input.WeeklyHours == nil || *input.WeeklyHours < 0 || *input.WeeklyHours > 168 || *input.WeeklyHours != math.Round(*input.WeeklyHours*100)/100 {
+		http.Error(w, "weeklyHours must be between 0 and 168 with at most two decimal places", http.StatusBadRequest)
 		return
 	}
+	weeklyHours := math.Round(*input.WeeklyHours*100) / 100
 
 	var person updatedPerson
 	err = s.db.QueryRow(r.Context(), `
@@ -50,7 +51,7 @@ func (s *server) handleUpdatePerson(w http.ResponseWriter, r *http.Request) {
 		SET weekly_hours = $1
 		WHERE id = $2
 		RETURNING id, name, weekly_hours::double precision
-	`, *input.WeeklyHours, id).Scan(&person.ID, &person.Name, &person.WeeklyHours)
+	`, weeklyHours, id).Scan(&person.ID, &person.Name, &person.WeeklyHours)
 	if errors.Is(err, pgx.ErrNoRows) {
 		http.Error(w, "person not found", http.StatusNotFound)
 		return
