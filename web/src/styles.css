@@ -1,32 +1,290 @@
 :root {
-  color-scheme: light dark;
   font-family: ui-sans-serif, system-ui, sans-serif;
+  color: #25313d;
+  background: #f5f7f9;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 1px solid #a8b6c4;
+  border-radius: 0.4rem;
+  padding: 0.45rem 0.7rem;
+  color: #25313d;
+  background: #fff;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #e9eff5;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #1769aa;
+  outline-offset: 2px;
+}
+
+input {
+  min-height: 2.25rem;
+  border: 1px solid #a8b6c4;
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  color: inherit;
+  background: #fff;
+}
+
+main {
+  max-width: 1600px;
+  margin: 0 auto;
   padding: 2rem;
 }
 
-h1 {
-  font-size: 1.4rem;
-  margin: 0 0 0.25rem;
+.page-header h1 {
+  margin: 0;
+  font-size: 1.8rem;
 }
 
-.range {
-  margin: 0 0 1.5rem;
-  opacity: 0.6;
-  font-variant-numeric: tabular-nums;
+.page-header p,
+.section-heading p {
+  margin: 0.35rem 0 0;
+  color: #526273;
+}
+
+.range-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.8rem 1rem;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border: 1px solid #d7dfe7;
+  border-radius: 0.65rem;
+  background: #fff;
+}
+
+.range-controls label,
+.grid-tools label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.week-navigation {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.primary-button {
+  border-color: #18629c;
+  color: #fff;
+  background: #18629c;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #134f7e;
+}
+
+.range-hint {
+  color: #526273;
+  font-size: 0.85rem;
+}
+
+.form-error {
+  width: 100%;
+  margin: 0;
+  color: #a12f24;
+}
+
+.capacity-section {
+  overflow: hidden;
+  border: 1px solid #d7dfe7;
+  border-radius: 0.65rem;
+  background: #fff;
+}
+
+.section-heading,
+.grid-tools,
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.people-count,
+.grid-tools > span,
+.pagination span {
+  color: #526273;
+  font-size: 0.9rem;
+}
+
+.grid-tools {
+  border-top: 1px solid #e1e7ed;
+}
+
+.grid-tools input {
+  width: min(20rem, 100%);
+}
+
+.status,
+.empty-state {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  color: #526273;
+}
+
+.message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.5rem 1.25rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.4rem;
+}
+
+.error-message {
+  color: #87291f;
+  background: #fff0ed;
+}
+
+.success-message {
+  color: #166041;
+  background: #eaf7f0;
+}
+
+.table-scroll {
+  max-height: 68vh;
+  overflow: auto;
+  border-top: 1px solid #e1e7ed;
+  border-bottom: 1px solid #e1e7ed;
 }
 
 table {
-  border-collapse: collapse;
+  width: 100%;
+  min-width: 850px;
+  border-collapse: separate;
+  border-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 
 th,
 td {
-  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
-  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e1e7ed;
+  padding: 0.7rem 0.8rem;
   text-align: left;
+  white-space: nowrap;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #eef2f6;
+  font-size: 0.85rem;
+}
+
+thead th:first-child {
+  left: 0;
+  z-index: 3;
+}
+
+.person-name {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 12rem;
+  background: #fff;
+}
+
+.capacity-edit {
+  min-width: 10rem;
+}
+
+.edit-display,
+.edit-form {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.edit-form input {
+  width: 5rem;
+}
+
+.edit-form button {
+  padding: 0.4rem;
+}
+
+.text-button {
+  border: 0;
+  padding: 0.2rem 0.35rem;
+  color: #17609a;
+  background: transparent;
+  text-decoration: underline;
+}
+
+.cell-value,
+.over-label {
+  display: block;
+}
+
+.over-capacity {
+  color: #87291f;
+  background: #fff0ed;
+  font-weight: 600;
+}
+
+.over-label {
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+}
+
+.pagination {
+  justify-content: flex-end;
+}
+
+@media (max-width: 700px) {
+  main {
+    padding: 1rem;
+  }
+
+  .range-controls {
+    align-items: stretch;
+  }
+
+  .week-navigation,
+  .range-controls label {
+    width: 100%;
+  }
+
+  .week-navigation button {
+    flex: 1;
+  }
 }
