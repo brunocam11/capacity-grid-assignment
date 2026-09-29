@@ -18,6 +18,7 @@ type CapacityResponse = {
 }
 
 type UpdatedPerson = Pick<CapacityPerson, 'id' | 'name' | 'weeklyHours'>
+type EditingPerson = Pick<CapacityPerson, 'id' | 'name'>
 
 const PAGE_SIZE = 50
 const hoursFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
@@ -38,13 +39,15 @@ function errorMessage(error: unknown): string {
 export function CapacityGrid({ from, to }: Props) {
   const rangeKey = `${from}:${to}`
   const activeLoad = useRef<AbortController | null>(null)
+  const editInput = useRef<HTMLInputElement | null>(null)
+  const editButton = useRef<HTMLButtonElement | null>(null)
   const [loaded, setLoaded] = useState<{ key: string; data: CapacityResponse } | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [revision, setRevision] = useState(0)
   const [filter, setFilter] = useState('')
   const [page, setPage] = useState(0)
-  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editingPerson, setEditingPerson] = useState<EditingPerson | null>(null)
   const [draftHours, setDraftHours] = useState('')
   const [savingId, setSavingId] = useState<number | null>(null)
   const [saveError, setSaveError] = useState('')
@@ -69,7 +72,6 @@ export function CapacityGrid({ from, to }: Props) {
         const data = (await response.json()) as CapacityResponse
         if (!controller.signal.aborted) {
           setLoaded({ key: rangeKey, data })
-          setNotice('')
         }
       } catch (error) {
         if (!controller.signal.aborted) setLoadError(errorMessage(error))
@@ -86,22 +88,46 @@ export function CapacityGrid({ from, to }: Props) {
   }, [from, to, revision, rangeKey])
 
   useEffect(() => {
-    setEditingId(null)
-    setSaveError('')
     setPage(0)
   }, [from, to])
 
+  useEffect(() => {
+    if (editingPerson && savingId === null) editInput.current?.focus()
+  }, [editingPerson, savingId])
+
+  useEffect(() => {
+    if (editingPerson || !editButton.current) return
+    if (editButton.current.isConnected && !editButton.current.disabled) editButton.current.focus()
+    editButton.current = null
+  }, [editingPerson])
+
+  function startEditing(person: CapacityPerson, button: HTMLButtonElement) {
+    if (editingPerson) return
+    editButton.current = button
+    setEditingPerson({ id: person.id, name: person.name })
+    setDraftHours(String(person.weeklyHours))
+    setSaveError('')
+    setNotice('')
+  }
+
+  function cancelEditing() {
+    if (savingId !== null) return
+    setEditingPerson(null)
+    setSaveError('')
+  }
+
   async function saveHours(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (editingId === null) return
+    if (editingPerson === null || savingId !== null) return
 
     const weeklyHours = Number(draftHours)
     if (draftHours.trim() === '' || !Number.isFinite(weeklyHours) || weeklyHours < 0 || weeklyHours > 168) {
-      setSaveError('Enter a number from 0 to 168 hours.')
+      setSaveError(`Enter 0 to 168 weekly hours for ${editingPerson.name}.`)
       return
     }
 
-    const personId = editingId
+    const personId = editingPerson.id
+    const personName = editingPerson.name
     setSavingId(personId)
     setSaveError('')
     setNotice('')
@@ -126,11 +152,11 @@ export function CapacityGrid({ from, to }: Props) {
           ),
         },
       })
-      setEditingId(null)
+      setEditingPerson(null)
       setNotice(`Saved ${saved.name}'s weekly hours.`)
       setRevision((value) => value + 1)
     } catch (error) {
-      setSaveError(`Save failed: ${errorMessage(error)}`)
+      setSaveError(`Could not save ${personName}'s weekly hours: ${errorMessage(error)}`)
     } finally {
       setSavingId(null)
     }
@@ -161,8 +187,39 @@ export function CapacityGrid({ from, to }: Props) {
           <button type="button" onClick={() => setRevision((value) => value + 1)}>Retry</button>
         </div>
       )}
-      {saveError && <p className="message error-message" role="alert">{saveError}</p>}
       {notice && <p className="message success-message" role="status">{notice}</p>}
+
+      {editingPerson && (
+        <form className="edit-panel" onSubmit={saveHours}>
+          <div>
+            <strong>Editing {editingPerson.name}</strong>
+            <p>Weekly hours apply to every week.</p>
+          </div>
+          <label>
+            Weekly hours for {editingPerson.name}
+            <input
+              ref={editInput}
+              type="number"
+              min="0"
+              max="168"
+              step="any"
+              value={draftHours}
+              onChange={(event) => setDraftHours(event.target.value)}
+              disabled={savingId !== null}
+              required
+            />
+          </label>
+          <div className="edit-actions">
+            <button type="submit" disabled={savingId !== null}>
+              {savingId !== null ? 'Saving…' : 'Save'}
+            </button>
+            <button type="button" disabled={savingId !== null} onClick={cancelEditing}>
+              Cancel
+            </button>
+          </div>
+          {saveError && <p className="edit-error" role="alert">{saveError}</p>}
+        </form>
+      )}
 
       {data && (
         <>
@@ -199,49 +256,17 @@ export function CapacityGrid({ from, to }: Props) {
                     <tr key={person.id}>
                       <th scope="row" className="person-name">{person.name}</th>
                       <td className="capacity-edit">
-                        {editingId === person.id ? (
-                          <form onSubmit={saveHours} className="edit-form">
-                            <input
-                              aria-label={`Weekly hours for ${person.name}`}
-                              type="number"
-                              min="0"
-                              max="168"
-                              step="any"
-                              value={draftHours}
-                              onChange={(event) => setDraftHours(event.target.value)}
-                              disabled={savingId === person.id}
-                              required
-                            />
-                            <button type="submit" disabled={savingId === person.id}>
-                              {savingId === person.id ? 'Saving…' : 'Save'}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={savingId === person.id}
-                              onClick={() => {
-                                setEditingId(null)
-                                setSaveError('')
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          </form>
-                        ) : (
-                          <div className="edit-display">
-                            <span>{hoursFormatter.format(person.weeklyHours)} h</span>
-                            <button
-                              type="button"
-                              className="text-button"
-                              onClick={() => {
-                                setEditingId(person.id)
-                                setDraftHours(String(person.weeklyHours))
-                                setSaveError('')
-                              }}
-                            >
-                              Edit
-                            </button>
-                          </div>
-                        )}
+                        <div className="edit-display">
+                          <span>{hoursFormatter.format(person.weeklyHours)} h</span>
+                          <button
+                            type="button"
+                            className="text-button"
+                            disabled={editingPerson !== null}
+                            onClick={(event) => startEditing(person, event.currentTarget)}
+                          >
+                            Edit
+                          </button>
+                        </div>
                       </td>
                       {data.weeks.map((week, index) => {
                         const allocated = person.allocatedHours[index] ?? 0
