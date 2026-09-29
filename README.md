@@ -103,3 +103,17 @@ We spend about ten minutes per submission, on:
 Then we talk about it for an hour, live, and extend it together. Come ready to explain
 what you decided and why — that conversation is the real point of this exercise, and it's
 much easier when the notes are honest about what you didn't get to.
+
+## Running the tests
+
+With `make up` running, run these from the repository root:
+
+```bash
+docker compose exec web npm test
+docker compose run --rm --no-deps --build api go test -v ./...
+```
+
+The API tests use Go's standard test tools. SQL cases use temporary tables in the
+existing Postgres service without changing the seeded data. Outside Compose,
+`go test ./...` in `api/` runs validation tests and skips SQL cases unless
+`DATABASE_URL` points to a database with the supplied schema.
