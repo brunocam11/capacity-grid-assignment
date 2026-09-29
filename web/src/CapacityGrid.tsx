@@ -33,7 +33,13 @@ function weekLabel(value: string): string {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Something went wrong.'
+  if (error instanceof TypeError) return 'Check your connection and try again.'
+  return error instanceof Error ? error.message : 'Please try again.'
+}
+
+async function responseErrorMessage(response: Response): Promise<string> {
+  if (response.status >= 500) return 'Server error. Try again.'
+  return (await response.text()).trim() || 'Please try again.'
 }
 
 export function CapacityGrid({ from, to }: Props) {
@@ -67,7 +73,7 @@ export function CapacityGrid({ from, to }: Props) {
           cache: 'no-store',
         })
         if (!response.ok) {
-          throw new Error((await response.text()).trim() || 'Could not load capacity.')
+          throw new Error(await responseErrorMessage(response))
         }
         const data = (await response.json()) as CapacityResponse
         if (!controller.signal.aborted) {
@@ -138,7 +144,7 @@ export function CapacityGrid({ from, to }: Props) {
         body: JSON.stringify({ weeklyHours }),
       })
       if (!response.ok) {
-        throw new Error((await response.text()).trim() || 'Could not save weekly hours.')
+        throw new Error(await responseErrorMessage(response))
       }
 
       const saved = (await response.json()) as UpdatedPerson

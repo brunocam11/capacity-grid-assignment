@@ -30,7 +30,7 @@ function deferred<T>() {
 test('keeps the draft and current numbers when a save fails', async () => {
   const fetchMock = vi.fn(async (_url: RequestInfo | URL, options?: RequestInit) =>
     options?.method === 'PATCH'
-      ? new Response('Service unavailable', { status: 503 })
+      ? new Response('person not found', { status: 404 })
       : jsonResponse(capacity(40, 45)),
   )
   vi.stubGlobal('fetch', fetchMock)
@@ -44,7 +44,7 @@ test('keeps the draft and current numbers when a save fails', async () => {
   })
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-  expect(await screen.findByText("Could not save Dee Okafor's weekly hours: Service unavailable")).toBeTruthy()
+  expect(await screen.findByText("Could not save Dee Okafor's weekly hours: person not found")).toBeTruthy()
   expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('50')
   expect(screen.getByText('45 / 40 h')).toBeTruthy()
   expect(screen.getByText('Over by 5 h')).toBeTruthy()
@@ -82,6 +82,28 @@ test('updates capacity from the save response while the refresh is pending', asy
   await waitFor(() => expect(screen.queryByText('Refreshing capacity…')).toBeNull())
   expect(screen.getByText("Saved Dee Okafor's weekly hours.")).toBeTruthy()
   expect(document.activeElement).toBe(editButton)
+})
+
+test('shows server and network load errors with a working Retry button', async () => {
+  let requests = 0
+  const fetchMock = vi.fn(() => {
+    requests += 1
+    if (requests === 1) return Promise.resolve(new Response(null, { status: 500 }))
+    if (requests === 2) return Promise.reject(new TypeError('Failed to fetch'))
+    return Promise.resolve(jsonResponse(capacity(40, 45)))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+
+  render(<CapacityGrid from="2026-01-05" to="2026-01-11" />)
+  expect(await screen.findByText('Could not load capacity: Server error. Try again.')).toBeTruthy()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  expect(await screen.findByText('Could not load capacity: Check your connection and try again.')).toBeTruthy()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  await screen.findByText('45 / 40 h')
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(fetchMock).toHaveBeenCalledTimes(3)
 })
 
 test('does not replace an active draft while another person is visible', async () => {
@@ -158,10 +180,10 @@ test('keeps a draft across a range change, failed save, and retry', async () => 
   expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('50')
 
   await act(async () => {
-    firstSave.resolve(new Response('Service unavailable', { status: 503 }))
+    firstSave.resolve(new Response(null, { status: 500 }))
     await firstSave.promise
   })
-  expect(await screen.findByText("Could not save Dee Okafor's weekly hours: Service unavailable")).toBeTruthy()
+  expect(await screen.findByText("Could not save Dee Okafor's weekly hours: Server error. Try again.")).toBeTruthy()
   expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('50')
 
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
