@@ -67,8 +67,10 @@ export function CapacityGrid({ from, to }: Props) {
           throw new Error((await response.text()).trim() || 'Could not load capacity.')
         }
         const data = (await response.json()) as CapacityResponse
-        setLoaded({ key: rangeKey, data })
-        setNotice('')
+        if (!controller.signal.aborted) {
+          setLoaded({ key: rangeKey, data })
+          setNotice('')
+        }
       } catch (error) {
         if (!controller.signal.aborted) setLoadError(errorMessage(error))
       } finally {
