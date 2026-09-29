@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 
 type Props = {
   from: string
@@ -20,9 +21,15 @@ type CapacityResponse = {
 type UpdatedPerson = Pick<CapacityPerson, 'id' | 'name' | 'weeklyHours'>
 type EditingPerson = Pick<CapacityPerson, 'id' | 'name'>
 
-const PAGE_SIZE = 50
+const ROW_HEIGHT = 72
 const hoursFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
 const weekFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  timeZone: 'UTC',
+})
+const rangeFormatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
   month: 'short',
   day: 'numeric',
   timeZone: 'UTC',
@@ -30,6 +37,10 @@ const weekFormatter = new Intl.DateTimeFormat('en-US', {
 
 function weekLabel(value: string): string {
   return weekFormatter.format(new Date(`${value}T00:00:00Z`))
+}
+
+function rangeLabel(value: string): string {
+  return rangeFormatter.format(new Date(`${value}T00:00:00Z`))
 }
 
 function errorMessage(error: unknown): string {
@@ -45,6 +56,8 @@ async function responseErrorMessage(response: Response): Promise<string> {
 export function CapacityGrid({ from, to }: Props) {
   const rangeKey = `${from}:${to}`
   const activeLoad = useRef<AbortController | null>(null)
+  const heading = useRef<HTMLHeadingElement | null>(null)
+  const scrollArea = useRef<HTMLDivElement | null>(null)
   const editInput = useRef<HTMLInputElement | null>(null)
   const editButton = useRef<HTMLButtonElement | null>(null)
   const [loaded, setLoaded] = useState<{ key: string; data: CapacityResponse } | null>(null)
@@ -52,7 +65,6 @@ export function CapacityGrid({ from, to }: Props) {
   const [loadError, setLoadError] = useState('')
   const [revision, setRevision] = useState(0)
   const [filter, setFilter] = useState('')
-  const [page, setPage] = useState(0)
   const [editingPerson, setEditingPerson] = useState<EditingPerson | null>(null)
   const [draftHours, setDraftHours] = useState('')
   const [savingId, setSavingId] = useState<number | null>(null)
@@ -94,16 +106,16 @@ export function CapacityGrid({ from, to }: Props) {
   }, [from, to, revision, rangeKey])
 
   useEffect(() => {
-    setPage(0)
-  }, [from, to])
-
-  useEffect(() => {
     if (editingPerson && savingId === null) editInput.current?.focus()
   }, [editingPerson, savingId])
 
   useEffect(() => {
     if (editingPerson || !editButton.current) return
-    if (editButton.current.isConnected && !editButton.current.disabled) editButton.current.focus()
+    if (editButton.current.isConnected && !editButton.current.disabled) {
+      editButton.current.focus()
+    } else {
+      heading.current?.focus()
+    }
     editButton.current = null
   }, [editingPerson])
 
@@ -126,9 +138,10 @@ export function CapacityGrid({ from, to }: Props) {
     event.preventDefault()
     if (editingPerson === null || savingId !== null) return
 
-    const weeklyHours = Number(draftHours)
-    if (draftHours.trim() === '' || !Number.isFinite(weeklyHours) || weeklyHours < 0 || weeklyHours > 168) {
-      setSaveError(`Enter 0 to 168 weekly hours for ${editingPerson.name}.`)
+    const enteredHours = Number(draftHours)
+    const weeklyHours = Math.round(enteredHours * 100) / 100
+    if (draftHours.trim() === '' || !Number.isFinite(enteredHours) || enteredHours < 0 || enteredHours > 168 || enteredHours !== weeklyHours) {
+      setSaveError(`Enter 0 to 168 weekly hours with at most two decimal places for ${editingPerson.name}.`)
       return
     }
 
@@ -169,18 +182,34 @@ export function CapacityGrid({ from, to }: Props) {
   }
 
   const data = loaded?.key === rangeKey ? loaded.data : null
-  const matchingPeople = data?.people.filter((person) =>
+  const matchingPeople = useMemo(() => data?.people.filter((person) =>
     person.name.toLowerCase().includes(filter.trim().toLowerCase()),
-  ) ?? []
-  const pageCount = Math.max(1, Math.ceil(matchingPeople.length / PAGE_SIZE))
-  const visiblePage = Math.min(page, pageCount - 1)
-  const visiblePeople = matchingPeople.slice(visiblePage * PAGE_SIZE, (visiblePage + 1) * PAGE_SIZE)
+  ) ?? [], [data, filter])
+  const getPersonKey = useCallback((index: number) => matchingPeople[index]?.id ?? index, [matchingPeople])
+  const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({
+    count: matchingPeople.length,
+    getScrollElement: () => scrollArea.current,
+    estimateSize: () => ROW_HEIGHT,
+    getItemKey: getPersonKey,
+    overscan: 5,
+    initialRect: { width: 850, height: 600 },
+  })
+  const virtualRows = rowVirtualizer.getVirtualItems()
+  const topSpace = virtualRows[0]?.start ?? 0
+  const bottomSpace = virtualRows.length
+    ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
+    : 0
+
+  useEffect(() => {
+    if (scrollArea.current) scrollArea.current.scrollTop = 0
+  }, [filter, rangeKey, matchingPeople.length])
 
   return (
-    <section className="capacity-section" aria-labelledby="capacity-heading" aria-busy={loading}>
+    <section className="capacity-section" aria-labelledby="capacity-heading">
       <div className="section-heading">
         <div>
-          <h2 id="capacity-heading">Capacity grid</h2>
+          <h2 id="capacity-heading" ref={heading} tabIndex={-1}>Capacity grid</h2>
+          <p>Applied range: {rangeLabel(from)} – {rangeLabel(to)}</p>
           <p>Allocated hours / weekly capacity. Dates expand to full weeks.</p>
         </div>
         {data && <span className="people-count">{data.people.length} people</span>}
@@ -196,10 +225,10 @@ export function CapacityGrid({ from, to }: Props) {
       {notice && <p className="message success-message" role="status">{notice}</p>}
 
       {editingPerson && (
-        <form className="edit-panel" onSubmit={saveHours}>
+        <form className="edit-panel" onSubmit={saveHours} noValidate>
           <div>
             <strong>Editing {editingPerson.name}</strong>
-            <p>Weekly hours apply to every week.</p>
+            <p>Weekly hours apply to every week. Use up to two decimal places.</p>
           </div>
           <label>
             Weekly hours for {editingPerson.name}
@@ -208,9 +237,12 @@ export function CapacityGrid({ from, to }: Props) {
               type="number"
               min="0"
               max="168"
-              step="any"
+              step="0.01"
               value={draftHours}
-              onChange={(event) => setDraftHours(event.target.value)}
+              onChange={(event) => {
+                setDraftHours(event.target.value)
+                setSaveError('')
+              }}
               disabled={savingId !== null}
               required
             />
@@ -235,73 +267,87 @@ export function CapacityGrid({ from, to }: Props) {
               <input
                 type="search"
                 value={filter}
-                onChange={(event) => {
-                  setFilter(event.target.value)
-                  setPage(0)
-                }}
+                onChange={(event) => setFilter(event.target.value)}
                 placeholder="Search by name"
               />
             </label>
-            <span>{matchingPeople.length} shown across {pageCount} {pageCount === 1 ? 'page' : 'pages'}</span>
+            <span>{matchingPeople.length} shown</span>
           </div>
 
           {matchingPeople.length === 0 ? (
             <p className="empty-state">No people match that search.</p>
           ) : (
-            <div className="table-scroll">
-              <table>
+            <div
+              className="table-scroll"
+              ref={scrollArea}
+              role="region"
+              aria-label="Capacity results"
+              aria-busy={loading}
+              tabIndex={0}
+            >
+              <table aria-rowcount={matchingPeople.length + 1} style={{ minWidth: `max(850px, ${22 + 9 * data.weeks.length}rem)` }}>
                 <thead>
-                  <tr>
+                  <tr aria-rowindex={1}>
                     <th scope="col">Person</th>
                     <th scope="col">Weekly hours</th>
                     {data.weeks.map((week) => <th scope="col" key={week}>Week of {weekLabel(week)}</th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {visiblePeople.map((person) => (
-                    <tr key={person.id}>
-                      <th scope="row" className="person-name">{person.name}</th>
-                      <td className="capacity-edit">
-                        <div className="edit-display">
-                          <span>{hoursFormatter.format(person.weeklyHours)} h</span>
-                          <button
-                            type="button"
-                            className="text-button"
-                            disabled={editingPerson !== null}
-                            onClick={(event) => startEditing(person, event.currentTarget)}
-                          >
-                            Edit
-                          </button>
-                        </div>
-                      </td>
-                      {data.weeks.map((week, index) => {
-                        const allocated = person.allocatedHours[index] ?? 0
-                        const over = allocated > person.weeklyHours
-                        return (
-                          <td key={week} className={over ? 'over-capacity' : 'within-capacity'}>
-                            <span className="cell-value">
-                              {hoursFormatter.format(allocated)} / {hoursFormatter.format(person.weeklyHours)} h
-                            </span>
-                            {over && <span className="over-label">Over by {hoursFormatter.format(allocated - person.weeklyHours)} h</span>}
-                          </td>
-                        )
-                      })}
+                  {topSpace > 0 && (
+                    <tr className="virtual-spacer" aria-hidden="true">
+                      <td colSpan={data.weeks.length + 2} style={{ height: topSpace }} />
                     </tr>
-                  ))}
+                  )}
+                  {virtualRows.map((virtualRow) => {
+                    const person = matchingPeople[virtualRow.index]
+                    return (
+                      <tr
+                        key={person.id}
+                        ref={rowVirtualizer.measureElement}
+                        data-index={virtualRow.index}
+                        className="capacity-row"
+                        aria-rowindex={virtualRow.index + 2}
+                      >
+                        <th scope="row" className="person-name" title={person.name}>{person.name}</th>
+                        <td className="capacity-edit">
+                          <div className="edit-display">
+                            <span>{hoursFormatter.format(person.weeklyHours)} h</span>
+                            <button
+                              type="button"
+                              className="text-button"
+                              aria-label={`Edit weekly hours for ${person.name}`}
+                              disabled={editingPerson !== null}
+                              onClick={(event) => startEditing(person, event.currentTarget)}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </td>
+                        {data.weeks.map((week, index) => {
+                          const allocated = person.allocatedHours[index] ?? 0
+                          const over = allocated > person.weeklyHours
+                          return (
+                            <td key={week} className={over ? 'over-capacity' : 'within-capacity'}>
+                              <span className="cell-value">
+                                {hoursFormatter.format(allocated)} / {hoursFormatter.format(person.weeklyHours)} h
+                              </span>
+                              {over && <span className="over-label">Over by {hoursFormatter.format(allocated - person.weeklyHours)} h</span>}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })}
+                  {bottomSpace > 0 && (
+                    <tr className="virtual-spacer" aria-hidden="true">
+                      <td colSpan={data.weeks.length + 2} style={{ height: bottomSpace }} />
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           )}
-
-          <div className="pagination">
-            <span>Page {visiblePage + 1} of {pageCount}</span>
-            <button type="button" disabled={visiblePage === 0} onClick={() => setPage(visiblePage - 1)}>
-              Previous 50
-            </button>
-            <button type="button" disabled={visiblePage >= pageCount - 1} onClick={() => setPage(visiblePage + 1)}>
-              Next 50
-            </button>
-          </div>
         </>
       )}
     </section>
